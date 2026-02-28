@@ -1,10 +1,18 @@
-name: Test Workflow
+name: AI Crypto Daily Report
 
 on:
-  push:
+  schedule:
+    - cron: '0 1 * * *'   # 北京时间 9:00（UTC 1:00）
+  workflow_dispatch:
 
 jobs:
-  test:
+  send-report:
     runs-on: ubuntu-latest
     steps:
-      - run: echo "Hello GitHub Actions"
+      - name: Send Report
+        run: |
+          TITLE="AI + Crypto 深度日报"
+          CONTENT="每日自动推送测试成功 🚀"
+          curl "https://sctapi.ftqq.com/${{ secrets.SCT_KEY }}.send" \
+            -d "title=${TITLE}" \
+            -d "desp=${CONTENT}"
