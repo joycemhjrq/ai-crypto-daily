@@ -1,6 +1,7 @@
 name: AI Crypto Daily Report
 
 on:
+  push:
   schedule:
     - cron: '0 1 * * *'   # 北京时间 9:00（UTC 1:00）
   workflow_dispatch:
