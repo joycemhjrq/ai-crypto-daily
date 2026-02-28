@@ -1,6 +1,7 @@
 import os
 import requests
 from datetime import datetime
+import time
 
 # -------------------------
 # 配置
@@ -12,38 +13,44 @@ FRED_KEY = os.getenv("FRED_KEY")
 NEWS_KEY = os.getenv("NEWS_KEY")
 
 # -------------------------
-# Step 1: 抓取 BTC / BNB 价格
+# Step 1: 抓取加密货币价格（免费）
 # -------------------------
 def get_crypto_prices():
     url = "https://api.coingecko.com/api/v3/simple/price"
     params = {
-        "ids": "bitcoin,binancecoin",
+        "ids": "bitcoin,binancecoin,ethereum",
         "vs_currencies": "usd",
         "include_24hr_change": "true"
     }
     resp = requests.get(url, params=params).json()
-    btc = resp['bitcoin']
-    bnb = resp['binancecoin']
-    return btc, bnb
+    btc = resp.get('bitcoin', {})
+    bnb = resp.get('binancecoin', {})
+    eth = resp.get('ethereum', {})
+    return btc, bnb, eth
 
 # -------------------------
-# Step 2: 抓取美股指数
+# Step 2: 抓取股票收盘价（免费 symbol）
 # -------------------------
 def get_stock_indices():
     base = "https://www.alphavantage.co/query"
-    symbols = {"AAPL": "AAPL", "MSFT": "MSFT", "IBM": "IBM"}
+    # 只抓免费 symbol（IBM, MSFT, AAPL 可能免费可用）
+    symbols = {"IBM": "IBM", "MSFT": "MSFT"}
     result = {}
     for name, symbol in symbols.items():
-        params = {"function": "TIME_SERIES_DAILY_ADJUSTED", "symbol": symbol,
-                  "apikey": ALPHA_KEY}
+        params = {
+            "function": "TIME_SERIES_DAILY",
+            "symbol": symbol,
+            "apikey": ALPHA_KEY
+        }
         r = requests.get(base, params=params).json()
-        print(symbol, r) 
+        print(symbol, r)  # 调试输出
         if "Time Series (Daily)" not in r:
             print(f"Warning: {symbol} 数据无法获取，可能是免费接口限制")
             continue
         last_day = list(r['Time Series (Daily)'].keys())[0]
         close = r['Time Series (Daily)'][last_day]['4. close']
         result[name] = close
+        time.sleep(15)  # 避免超频
     return result
 
 # -------------------------
@@ -83,29 +90,28 @@ def get_news():
     return "\n".join(articles) if articles else "No major news today."
 
 # -------------------------
-# Step 5: 调用 OpenAI GPT-4o-mini 生成深度分析
+# Step 5: 调用 OpenAI GPT-4o-mini 生成深度分析（新 API）
 # -------------------------
-def generate_analysis(btc, bnb, stocks, treasury, dxy, news_text):
-    import json
-    import openai
-    openai.api_key = OPENAI_KEY
+def generate_analysis(btc, bnb, eth, stocks, treasury, dxy, news_text):
+    from openai import OpenAI
+    client = OpenAI(api_key=OPENAI_KEY)
     
     system_prompt = (
         "你是专业宏观+AI+加密市场分析师。"
-        "请生成一份深度日报，包含以下内容：宏观环境、科技股联动、AI行业动态、BTC结构分析、BNB结构分析、CZ/何一新闻分析、市场情绪判断。"
+        "请生成一份深度日报，包含以下内容：宏观环境、科技股联动、AI行业动态、BTC结构分析、BNB/ETH结构分析、CZ/何一新闻分析、市场情绪判断。"
         "最终结果10-15分钟阅读量。"
     )
     
     user_prompt = (
         f"数据:\n"
-        f"BTC: {btc}\nBNB: {bnb}\n"
+        f"BTC: {btc}\nBNB: {bnb}\nETH: {eth}\n"
         f"Stocks: {stocks}\n"
         f"10Y Treasury: {treasury}\nDXY: {dxy}\n"
         f"News:\n{news_text}\n"
         f"请生成深度分析日报，中文或英文均可。"
     )
     
-    response = openai.ChatCompletion.create(
+    response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
             {"role": "system", "content": system_prompt},
@@ -129,12 +135,12 @@ def send_wechat(title, content):
 # Step 7: 主程序
 # -------------------------
 if __name__ == "__main__":
-    btc, bnb = get_crypto_prices()
+    btc, bnb, eth = get_crypto_prices()
     stocks = get_stock_indices()
     treasury, dxy = get_macro_data()
     news_text = get_news()
     
-    report = generate_analysis(btc, bnb, stocks, treasury, dxy, news_text)
+    report = generate_analysis(btc, bnb, eth, stocks, treasury, dxy, news_text)
     
     send_wechat("AI + Crypto 深度日报", report)
     print("日报推送完成 ✅")
