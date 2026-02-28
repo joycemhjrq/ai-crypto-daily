@@ -29,12 +29,11 @@ def get_crypto_prices():
     return btc, bnb, eth
 
 # -------------------------
-# Step 2: 抓取股票收盘价（免费 symbol）
+# Step 2: 抓取股票收盘价（免费 symbol + 容错）
 # -------------------------
 def get_stock_indices():
     base = "https://www.alphavantage.co/query"
-    # 只抓免费 symbol（IBM, MSFT, AAPL 可能免费可用）
-    symbols = {"IBM": "IBM", "MSFT": "MSFT"}
+    symbols = {"IBM": "IBM", "MSFT": "MSFT"}  # 免费 symbol
     result = {}
     for name, symbol in symbols.items():
         params = {
@@ -90,18 +89,20 @@ def get_news():
     return "\n".join(articles) if articles else "No major news today."
 
 # -------------------------
-# Step 5: 调用 OpenAI GPT-4o-mini 生成深度分析（新 API）
+# Step 5: 调用 OpenAI GPT-4o-mini 生成深度分析（自动处理 quota 超限）
 # -------------------------
 def generate_analysis(btc, bnb, eth, stocks, treasury, dxy, news_text):
     from openai import OpenAI
+    from openai.error import RateLimitError, OpenAIError
+
     client = OpenAI(api_key=OPENAI_KEY)
-    
+
     system_prompt = (
         "你是专业宏观+AI+加密市场分析师。"
         "请生成一份深度日报，包含以下内容：宏观环境、科技股联动、AI行业动态、BTC结构分析、BNB/ETH结构分析、CZ/何一新闻分析、市场情绪判断。"
         "最终结果10-15分钟阅读量。"
     )
-    
+
     user_prompt = (
         f"数据:\n"
         f"BTC: {btc}\nBNB: {bnb}\nETH: {eth}\n"
@@ -110,18 +111,32 @@ def generate_analysis(btc, bnb, eth, stocks, treasury, dxy, news_text):
         f"News:\n{news_text}\n"
         f"请生成深度分析日报，中文或英文均可。"
     )
-    
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ],
-        temperature=0.7,
-        max_tokens=2000
-    )
-    
-    return response.choices[0].message.content
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.7,
+            max_tokens=2000
+        )
+        return response.choices[0].message.content
+
+    except RateLimitError as e:
+        print("⚠️ OpenAI quota 超限:", e)
+        return (
+            "⚠️ OpenAI quota 超限，暂时无法生成深度分析。"
+            "日报只包含行情和新闻数据。"
+        )
+
+    except OpenAIError as e:
+        print("⚠️ OpenAI API 其他错误:", e)
+        return (
+            "⚠️ OpenAI API 出现错误，暂时无法生成深度分析。"
+            "日报只包含行情和新闻数据。"
+        )
 
 # -------------------------
 # Step 6: 推送微信
