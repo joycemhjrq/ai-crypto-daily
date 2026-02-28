@@ -15,7 +15,7 @@ FRED_KEY = os.getenv("FRED_KEY")
 NEWS_KEY = os.getenv("NEWS_KEY")
 
 # -------------------------
-# Step 1: 抓取加密货币价格（免费）
+# Step 1: 抓取加密货币价格
 # -------------------------
 def get_crypto_prices():
     url = "https://api.coingecko.com/api/v3/simple/price"
@@ -44,7 +44,7 @@ def get_stock_indices():
             "apikey": ALPHA_KEY
         }
         r = requests.get(base, params=params).json()
-        print(symbol, r)  # 调试输出
+        print(symbol, r)
         if "Time Series (Daily)" not in r:
             print(f"Warning: {symbol} 数据无法获取，可能是免费接口限制")
             continue
@@ -55,17 +55,17 @@ def get_stock_indices():
     return result
 
 # -------------------------
-# Step 3: 抓取美债收益率 & 美元指数
+# Step 3: 抓取宏观数据
 # -------------------------
 def get_macro_data():
     treasury_url = f"https://api.stlouisfed.org/fred/series/observations?series_id=DGS10&api_key={FRED_KEY}&file_type=json"
     treasury = requests.get(treasury_url).json()
     latest_treasury = treasury['observations'][-1]['value']
-    
+
     dxy_url = f"https://api.stlouisfed.org/fred/series/observations?series_id=DTWEXM&api_key={FRED_KEY}&file_type=json"
     dxy = requests.get(dxy_url).json()
     latest_dxy = dxy['observations'][-1]['value']
-    
+
     return latest_treasury, latest_dxy
 
 # -------------------------
@@ -89,27 +89,22 @@ def get_news():
     return "\n".join(articles) if articles else "No major news today."
 
 # -------------------------
-# Step 5: 调用 OpenAI GPT-4o-mini 生成深度分析（兼容 SDK v1+）
+# Step 5: 调用 OpenAI GPT-4o-mini 生成深度分析（兼容 v1+ SDK）
 # -------------------------
 def generate_analysis(btc, bnb, eth, stocks, treasury, dxy, news_text):
-    client = OpenAI(api_key=OPENAI_KEY)
-
-    system_prompt = (
-        "你是专业宏观+AI+加密市场分析师。"
-        "请生成一份深度日报，包含以下内容：宏观环境、科技股联动、AI行业动态、BTC结构分析、BNB/ETH结构分析、CZ/何一新闻分析、市场情绪判断。"
-        "最终结果10-15分钟阅读量。"
-    )
-
-    user_prompt = (
-        f"数据:\n"
-        f"BTC: {btc}\nBNB: {bnb}\nETH: {eth}\n"
-        f"Stocks: {stocks}\n"
-        f"10Y Treasury: {treasury}\nDXY: {dxy}\n"
-        f"News:\n{news_text}\n"
-        f"请生成深度分析日报，中文或英文均可。"
-    )
-
     try:
+        client = OpenAI(api_key=OPENAI_KEY)
+        system_prompt = (
+            "你是专业宏观+AI+加密市场分析师。"
+            "请生成一份深度日报，包含宏观、科技股、AI动态、BTC/BNB/ETH分析、市场情绪等。"
+            "10-15分钟阅读量。"
+        )
+        user_prompt = (
+            f"数据:\nBTC:{btc}\nBNB:{bnb}\nETH:{eth}\n"
+            f"Stocks:{stocks}\n10Y Treasury:{treasury}\nDXY:{dxy}\nNews:{news_text}\n"
+            "请生成深度分析日报，中文或英文均可。"
+        )
+
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
@@ -121,19 +116,17 @@ def generate_analysis(btc, bnb, eth, stocks, treasury, dxy, news_text):
         )
         return response.choices[0].message.content
 
-    except openai.RateLimitError as e:
-        print("⚠️ OpenAI quota 超限:", e)
-        return (
-            "⚠️ OpenAI quota 超限，暂时无法生成深度分析。"
-            "日报只包含行情和新闻数据。"
+    except (openai.RateLimitError, openai.OpenAIError, Exception) as e:
+        print("⚠️ OpenAI 生成失败或 quota 超限:", e)
+        # 返回基础行情 + 新闻作为备用日报
+        report = (
+            "⚠️ OpenAI quota 超限或出现错误，无法生成深度分析。\n\n"
+            f"【加密货币行情】\nBTC: {btc}\nBNB: {bnb}\nETH: {eth}\n\n"
+            f"【股票行情】\n{stocks}\n\n"
+            f"【宏观指标】\n10Y Treasury: {treasury}\nDXY: {dxy}\n\n"
+            f"【今日新闻】\n{news_text}"
         )
-
-    except openai.OpenAIError as e:
-        print("⚠️ OpenAI API 其他错误:", e)
-        return (
-            "⚠️ OpenAI API 出现错误，暂时无法生成深度分析。"
-            "日报只包含行情和新闻数据。"
-        )
+        return report
 
 # -------------------------
 # Step 6: 推送微信
@@ -151,8 +144,7 @@ if __name__ == "__main__":
     stocks = get_stock_indices()
     treasury, dxy = get_macro_data()
     news_text = get_news()
-    
+
     report = generate_analysis(btc, bnb, eth, stocks, treasury, dxy, news_text)
-    
     send_wechat("AI + Crypto 深度日报", report)
     print("日报推送完成 ✅")
