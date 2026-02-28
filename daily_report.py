@@ -31,13 +31,16 @@ def get_crypto_prices():
 # -------------------------
 def get_stock_indices():
     base = "https://www.alphavantage.co/query"
-    symbols = {"S&P500": "SPY", "NASDAQ": "QQQ", "AAPL": "AAPL", "MSFT": "MSFT", "TSLA": "TSLA"}
+    symbols = {"AAPL": "AAPL", "MSFT": "MSFT", "IBM": "IBM"}
     result = {}
     for name, symbol in symbols.items():
         params = {"function": "TIME_SERIES_DAILY_ADJUSTED", "symbol": symbol,
                   "apikey": ALPHA_KEY}
         r = requests.get(base, params=params).json()
         print(symbol, r) 
+        if "Time Series (Daily)" not in r:
+            print(f"Warning: {symbol} 数据无法获取，可能是免费接口限制")
+            continue
         last_day = list(r['Time Series (Daily)'].keys())[0]
         close = r['Time Series (Daily)'][last_day]['4. close']
         result[name] = close
