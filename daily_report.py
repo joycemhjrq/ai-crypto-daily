@@ -37,6 +37,7 @@ def get_stock_indices():
         params = {"function": "TIME_SERIES_DAILY_ADJUSTED", "symbol": symbol,
                   "apikey": ALPHA_KEY}
         r = requests.get(base, params=params).json()
+        print(symbol, r) 
         last_day = list(r['Time Series (Daily)'].keys())[0]
         close = r['Time Series (Daily)'][last_day]['4. close']
         result[name] = close
