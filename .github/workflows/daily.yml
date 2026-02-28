@@ -7,13 +7,31 @@ on:
   workflow_dispatch:
 
 jobs:
-  send-report:
+  generate-and-send:
     runs-on: ubuntu-latest
     steps:
-      - name: Send Report
+      - name: Generate Report
+        id: report
         run: |
-          TITLE="AI + Crypto 深度日报"
-          CONTENT="每日自动推送测试成功 🚀"
+          RESPONSE=$(curl https://api.openai.com/v1/chat/completions \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${{ secrets.OPENAI_KEY }}" \
+            -d '{
+              "model": "gpt-4o-mini",
+              "messages": [
+                {"role": "system", "content": "你是专业宏观+AI+加密市场分析师。写一份深度版日报，包含宏观、美股科技股联动、AI行业、BTC结构、BNB结构、CZ和何一动态分析。"},
+                {"role": "user", "content": "生成今日AI+Crypto深度日报，10分钟阅读量。"}
+              ],
+              "temperature": 0.7
+            }')
+
+          CONTENT=$(echo $RESPONSE | jq -r '.choices[0].message.content')
+          echo "REPORT<<EOF" >> $GITHUB_ENV
+          echo "$CONTENT" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      - name: Send to WeChat
+        run: |
           curl "https://sctapi.ftqq.com/${{ secrets.SCT_KEY }}.send" \
-            -d "title=${TITLE}" \
-            -d "desp=${CONTENT}"
+            -d "title=AI + Crypto 深度日报" \
+            --data-urlencode "desp=${REPORT}"
