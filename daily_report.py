@@ -2,6 +2,8 @@ import os
 import requests
 from datetime import datetime
 import time
+from openai import OpenAI
+import openai
 
 # -------------------------
 # 配置
@@ -56,12 +58,10 @@ def get_stock_indices():
 # Step 3: 抓取美债收益率 & 美元指数
 # -------------------------
 def get_macro_data():
-    # 10Y Treasury
     treasury_url = f"https://api.stlouisfed.org/fred/series/observations?series_id=DGS10&api_key={FRED_KEY}&file_type=json"
     treasury = requests.get(treasury_url).json()
     latest_treasury = treasury['observations'][-1]['value']
     
-    # 美元指数 DXY
     dxy_url = f"https://api.stlouisfed.org/fred/series/observations?series_id=DTWEXM&api_key={FRED_KEY}&file_type=json"
     dxy = requests.get(dxy_url).json()
     latest_dxy = dxy['observations'][-1]['value']
@@ -89,12 +89,9 @@ def get_news():
     return "\n".join(articles) if articles else "No major news today."
 
 # -------------------------
-# Step 5: 调用 OpenAI GPT-4o-mini 生成深度分析（自动处理 quota 超限）
+# Step 5: 调用 OpenAI GPT-4o-mini 生成深度分析（兼容 SDK v1+）
 # -------------------------
 def generate_analysis(btc, bnb, eth, stocks, treasury, dxy, news_text):
-    from openai import OpenAI
-    from openai.error import RateLimitError, OpenAIError
-
     client = OpenAI(api_key=OPENAI_KEY)
 
     system_prompt = (
@@ -124,14 +121,14 @@ def generate_analysis(btc, bnb, eth, stocks, treasury, dxy, news_text):
         )
         return response.choices[0].message.content
 
-    except RateLimitError as e:
+    except openai.RateLimitError as e:
         print("⚠️ OpenAI quota 超限:", e)
         return (
             "⚠️ OpenAI quota 超限，暂时无法生成深度分析。"
             "日报只包含行情和新闻数据。"
         )
 
-    except OpenAIError as e:
+    except openai.OpenAIError as e:
         print("⚠️ OpenAI API 其他错误:", e)
         return (
             "⚠️ OpenAI API 出现错误，暂时无法生成深度分析。"
